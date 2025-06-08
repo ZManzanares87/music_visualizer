@@ -6,6 +6,8 @@ let isPlaying = false;
 
 let camZ = 30, camX = 0, camY = 15;
 const cityLength = 40;
+const numberOfClones = 4;
+let cityClones = [];
 
 const clock = new THREE.Clock();
 let currentCamX = camX;
@@ -41,13 +43,16 @@ function init() {
   createCity();
   generateLines();
   setupLights();
-  scene.add(city);
 
-  // Agregamos clones
-  for (let i = 1; i <= 3; i++) {
-    const cityClone = city.clone();
-    cityClone.position.z = -i * cityLength;
-    scene.add(cityClone);
+  city.position.z = 0;
+  scene.add(city);
+  cityClones.push(city);
+
+  for (let i = 1; i < numberOfClones; i++) {
+    const clone = city.clone();
+    clone.position.z = -i * cityLength;
+    scene.add(clone);
+    cityClones.push(clone);
   }
 
   document.getElementById('audioFile').addEventListener('change', handleAudio);
@@ -248,21 +253,15 @@ function animate() {
     currentCamY += (targetY - currentCamY) * damping;
     currentCamZ += (targetZ - currentCamZ) * damping;
 
-    // 🌀 Movimiento infinito sin reinicio: movemos ciudad en lugar de cámara
-    if (camZ < -cityLength * 1.5) {
-      camZ += cityLength;
-      currentCamZ += cityLength;
-      city.position.z += cityLength;
-
-      scene.children.forEach(obj => {
-        if (obj !== camera && obj.type === 'Object3D') {
-          obj.position.z += cityLength;
-        }
-      });
-    }
+    cityClones.forEach(clone => {
+      const dz = clone.position.z - camZ;
+      if (dz > cityLength * numberOfClones * 0.5) {
+        clone.position.z -= cityLength * numberOfClones;
+      }
+    });
 
     camera.position.set(currentCamX, currentCamY, currentCamZ);
-    camera.lookAt(new THREE.Vector3(0, 0, currentCamZ - 10));
+    camera.lookAt(new THREE.Vector3(currentCamX, 6, currentCamZ - 20));
 
     if (window._audioParticles) {
       const scaleFactor = 1 + (smoothedAvg / 255) * 0.5;
