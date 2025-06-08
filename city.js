@@ -3,9 +3,15 @@ import * as THREE from 'three';
 let scene, camera, renderer, analyser, dataArray, audio, source;
 let city = new THREE.Object3D(), smoke = new THREE.Object3D(), town = new THREE.Object3D();
 let isPlaying = false;
+
 let camZ = 30, camX = 0, camY = 15;
 const cityLength = 40;
-let loopOffsetZ = 30;
+
+const clock = new THREE.Clock();
+let currentCamX = camX;
+let currentCamY = camY;
+let currentCamZ = camZ;
+let smoothedAvg = 0;
 
 init();
 animate();
@@ -37,7 +43,8 @@ function init() {
   setupLights();
   scene.add(city);
 
-  for (let i = 1; i <= 2; i++) {
+  // Agregamos clones
+  for (let i = 1; i <= 3; i++) {
     const cityClone = city.clone();
     cityClone.position.z = -i * cityLength;
     scene.add(cityClone);
@@ -217,7 +224,8 @@ function animate() {
 
   if (analyser && dataArray) {
     analyser.getByteFrequencyData(dataArray);
-    const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    const rawAvg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    smoothedAvg += (rawAvg - smoothedAvg) * 0.1;
 
     town.children.forEach((b, i) => {
       const scale = 0.5 + (dataArray[i % dataArray.length] / 255) * 2;
@@ -226,22 +234,38 @@ function animate() {
       b.material.emissiveIntensity = 0.3 + scale * 0.05;
     });
 
-    const time = Date.now() * 0.001;
-    const speed = 0.02 + avg / 1024;
+    const time = clock.getElapsedTime();
+    const speed = 0.02 + smoothedAvg / 1024;
     camZ -= speed;
-    camX = Math.sin(time * 0.3) * 10;
-    const flyLow = Math.sin(time * 0.2) * 0.5 + 0.5;
-    camY = 10 - flyLow * 6 + Math.sin(time * 0.5) * 1.5;
 
-    if (camZ < loopOffsetZ - cityLength) {
-      camZ = loopOffsetZ;
+    const targetX = Math.sin(time * 0.3) * 10;
+    const flyLow = Math.sin(time * 0.2) * 0.5 + 0.5;
+    const targetY = 10 - flyLow * 6 + Math.sin(time * 0.5) * 1.5;
+    const targetZ = camZ;
+
+    const damping = 0.05;
+    currentCamX += (targetX - currentCamX) * damping;
+    currentCamY += (targetY - currentCamY) * damping;
+    currentCamZ += (targetZ - currentCamZ) * damping;
+
+    // 🌀 Movimiento infinito sin reinicio: movemos ciudad en lugar de cámara
+    if (camZ < -cityLength * 1.5) {
+      camZ += cityLength;
+      currentCamZ += cityLength;
+      city.position.z += cityLength;
+
+      scene.children.forEach(obj => {
+        if (obj !== camera && obj.type === 'Object3D') {
+          obj.position.z += cityLength;
+        }
+      });
     }
 
-    camera.position.set(camX, camY, camZ);
-    camera.lookAt(new THREE.Vector3(0, 0, camZ - 10));
+    camera.position.set(currentCamX, currentCamY, currentCamZ);
+    camera.lookAt(new THREE.Vector3(0, 0, currentCamZ - 10));
 
     if (window._audioParticles) {
-      const scaleFactor = 1 + (avg / 255) * 0.5;
+      const scaleFactor = 1 + (smoothedAvg / 255) * 0.5;
       window._audioParticles.scale.set(scaleFactor, scaleFactor, scaleFactor);
     }
   }
